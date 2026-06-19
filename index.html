@@ -660,13 +660,10 @@ function App() {
     const unsubCo=db.collection(COL.co).onSnapshot(snap=>{
       const data=snap.docs.map(d=>({...d.data(),id:d.id}));
       setCos(data); coOk=true; done();
-      // 初回マイグレーション: Firestoreが空でlocalStorageにデータがあれば移行
-      if(data.length===0){ const loc=lsLoad(SK.co); if(loc.length>0){ const b=db.batch(); loc.forEach(c=>{ const {id,...d}=c; b.set(db.collection(COL.co).doc(id),d); }); b.commit(); } }
     });
     const unsubTk=db.collection(COL.tk).onSnapshot(snap=>{
       const data=snap.docs.map(d=>({...d.data(),id:d.id}));
       setTasks(data); tkOk=true; done();
-      if(data.length===0){ const loc=lsLoad(SK.tk); if(loc.length>0){ const b=db.batch(); loc.forEach(t=>{ const {id,...d}=t; b.set(db.collection(COL.tk).doc(id),d); }); b.commit(); } }
     });
     return ()=>{ unsubCo(); unsubTk(); };
   },[]);
