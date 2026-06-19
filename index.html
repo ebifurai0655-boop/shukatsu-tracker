@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>就活管理</title>
+  <script src="preact.js"></script>
+  <script src="preact-hooks.js"></script>
+  <script src="htm.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f4f8; color: #1e293b; min-height: 100vh; }
+    #root { min-height: 100vh; }
+    .app { max-width: 900px; margin: 0 auto; padding: 0 0 80px; }
+    .header { background: #1e40af; color: white; padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+    .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
+    .back-btn { background: rgba(255,255,255,.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .back-btn:hover { background: rgba(255,255,255,.3); }
+    .content { padding: 16px; }
+    .card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 12px; }
+    .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .section-title { font-size: 15px; font-weight: 700; color: #1e293b; }
+    .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; }
+    .btn-ghost:hover { background: #f8fafc; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+    .btn-icon { padding: 6px; width: 30px; height: 30px; justify-content: center; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge-blue { background: #dbeafe; color: #1d4ed8; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-gray { background: #f1f5f9; color: #64748b; }
+    .badge-amber { background: #fef3c7; color: #d97706; }
+    .badge-purple { background: #ede9fe; color: #7c3aed; }
+    .badge-indigo { background: #e0e7ff; color: #4338ca; }
+    .task-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #f8fafc; margin-bottom: 6px; border-left: 4px solid transparent; }
+    .task-item.p1 { border-left-color: #ef4444; }
+    .task-item.p2 { border-left-color: #f59e0b; }
+    .task-item.p3 { border-left-color: #94a3b8; }
+    .task-item.overdue { background: #fef2f2; }
+    .task-item.due-soon { background: #fffbeb; }
+    .task-check { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #cbd5e1; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; background: white; font-size: 12px; }
+    .task-check.checked { background: #16a34a; border-color: #16a34a; color: white; }
+    .task-body { flex: 1; min-width: 0; }
+    .task-title { font-size: 14px; font-weight: 600; }
+    .task-done { text-decoration: line-through; color: #94a3b8; }
+    .task-meta { font-size: 11px; color: #94a3b8; margin-top: 2px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .overdue-label { color: #ef4444; font-weight: 700; }
+    .soon-label { color: #d97706; font-weight: 700; }
+    .company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .company-mini { background: #f8fafc; border-radius: 10px; padding: 12px; border: 1px solid #e2e8f0; cursor: pointer; transition: all .15s; }
+    .company-mini:hover { border-color: #2563eb; background: #eff6ff; }
+    .company-mini-name { font-size: 13px; font-weight: 700; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .company-list-item { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: white; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #e2e8f0; transition: all .15s; }
+    .company-list-item:hover { border-color: #2563eb; box-shadow: 0 2px 8px rgba(37,99,235,.15); }
+    .entry-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #f8fafc; border-radius: 10px; margin-bottom: 8px; cursor: pointer; border: 1px solid #e2e8f0; transition: all .15s; }
+    .entry-card:hover { background: #eff6ff; border-color: #93c5fd; }
+    .entry-icon { width: 36px; height: 36px; border-radius: 8px; background: #e0e7ff; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+    .entry-body { flex: 1; min-width: 0; }
+    .entry-title { font-size: 14px; font-weight: 700; }
+    .entry-sub { font-size: 11px; color: #94a3b8; margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
+    .chevron { color: #94a3b8; font-size: 18px; line-height: 1; }
+    .cred-row { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 6px; border: 1px solid #e2e8f0; }
+    .cred-label { font-size: 11px; font-weight: 700; color: #64748b; width: 56px; flex-shrink: 0; }
+    .cred-val { font-size: 13px; color: #1e293b; flex: 1; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cred-val.hidden { color: #94a3b8; letter-spacing: 4px; }
+    .copy-btn { background: #e2e8f0; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; color: #475569; white-space: nowrap; }
+    .copy-btn:hover { background: #cbd5e1; }
+    .detail-block { margin-bottom: 16px; }
+    .detail-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+    .detail-val { font-size: 14px; line-height: 1.6; white-space: pre-wrap; background: #f8fafc; padding: 10px 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; display: flex; align-items: flex-end; justify-content: center; }
+    @media(min-width:600px){ .modal-overlay { align-items: center; padding: 20px; } }
+    .modal { background: white; border-radius: 16px 16px 0 0; width: 100%; max-width: 540px; max-height: 92vh; overflow-y: auto; padding: 24px; }
+    @media(min-width:600px){ .modal { border-radius: 16px; } }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .modal-title { font-size: 17px; font-weight: 700; }
+    .form-g { margin-bottom: 13px; }
+    .form-label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+    .form-label.req::after { content: ' *'; color: #ef4444; }
+    .form-input, .form-select, .form-textarea { width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 14px; color: #1e293b; font-family: inherit; background: white; transition: border-color .15s; }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.1); }
+    .form-textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; padding-top: 14px; border-top: 1px solid #f1f5f9; }
+    .del-zone { margin-top: 14px; padding-top: 14px; border-top: 1px solid #fee2e2; }
+    .breadcrumb { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #94a3b8; margin-bottom: 12px; flex-wrap: wrap; }
+    .breadcrumb a { color: #2563eb; cursor: pointer; }
+    .empty { text-align: center; padding: 32px 16px; color: #94a3b8; }
+    .empty-icon { font-size: 36px; margin-bottom: 10px; }
+    .warn-bar { background: #fef3c7; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; color: #92400e; }
+    .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 8px; }
+    .stat-card { background: white; border-radius: 10px; padding: 12px 8px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+    .stat-num { font-size: 22px; font-weight: 800; }
+    .stat-label { font-size: 11px; color: #64748b; margin-top: 2px; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 600; z-index: 300; box-shadow: 0 4px 12px rgba(0,0,0,.3); pointer-events: none; }
+    .section-sep { height: 1px; background: #f1f5f9; margin: 12px 0; }
+    .tag-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// Setup Preact + htm
+const { h, render, Fragment } = preact;
+const { useState, useEffect, useCallback } = preactHooks;
+const html = htm.bind(h);
+
+// ── Firebase ─────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBdDVLlmqcNjUtY_Kds1TZXA8IZNwVIIEQ",
+  authDomain: "shukatsu-tracke.firebaseapp.com",
+  projectId: "shukatsu-tracke",
+  storageBucket: "shukatsu-tracke.firebasestorage.app",
+  messagingSenderId: "902132818348",
+  appId: "1:902132818348:web:d354b4bbc4fa53bd6eda09"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const COL = { co: 'companies', tk: 'tasks' };
+
+// ── localStorage (migration source only) ─────────────────
+const SK = { co: 'skt_co', tk: 'skt_tk' };
+const lsLoad = k => { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } };
+const uid = () => Math.random().toString(36).slice(2,9);
+
+// Firestore helpers
+const fsSet = (col, obj) => { const {id, ...data} = obj; return db.collection(col).doc(id).set(data); };
+const fsDel = (col, id) => db.collection(col).doc(id).delete();
+const fsUpd = (col, id, data) => db.collection(col).doc(id).update(data);
+
+// ── Helpers ──────────────────────────────────────────────
+const SC = { '応募済み':'badge-gray','選考中':'badge-blue','書類選考中':'badge-indigo','内定':'badge-green','参加確定':'badge-green','不合格':'badge-red','辞退':'badge-gray','通過':'badge-green','未定':'badge-gray','待機中':'badge-amber','エントリー中':'badge-indigo' };
+const badgeCls = s => 'badge ' + (SC[s]||'badge-gray');
+
+// エントリー・ラウンド情報から最新の選考状況を導出
+function computeDisplayStatus(company) {
+  const entries = company.entries || [];
+  if (entries.length === 0) return { text: company.status || 'エントリー中', cls: badgeCls(company.status || 'エントリー中') };
+
+  const P = { '内定':0, '参加確定':1, '選考中':2, '応募済み':3, '不合格':8, '辞退':9 };
+  const sorted = [...entries].sort((a,b) => (P[a.status]??5) - (P[b.status]??5));
+  const best = sorted[0];
+
+  if (best.status === '内定') {
+    return best.type === '本選考'
+      ? { text: '🎉 内定', cls: 'badge badge-green' }
+      : { text: `${best.type}内定`, cls: 'badge badge-green' };
+  }
+
+  if (best.status === '参加確定') {
+    return { text: `${best.type}参加確定`, cls: 'badge badge-green' };
+  }
+
+  if (best.status === '選考中') {
+    const rounds = best.rounds || [];
+    const pending = rounds.filter(r => r.result === '待機中');
+    const passed  = rounds.filter(r => r.result === '通過');
+
+    if (pending.length > 0) {
+      const last = pending[pending.length - 1];
+      return { text: `${last.name} 結果待ち`, cls: 'badge badge-amber' };
+    }
+    if (passed.length > 0) {
+      return { text: `${passed[passed.length-1].name} 通過`, cls: 'badge badge-blue' };
+    }
+    // ラウンド情報なし
+    if (best.type === '本選考') return { text: '本選考 選考中', cls: 'badge badge-indigo' };
+    return { text: `${best.type} 選考中`, cls: 'badge badge-blue' };
+  }
+
+  if (best.status === '応募済み') {
+    return { text: `${best.type} 応募済み`, cls: 'badge badge-gray' };
+  }
+
+  // 全エントリーが不合格または辞退
+  const allWithdraw = entries.every(e => e.status === '辞退');
+  if (allWithdraw) return { text: '辞退', cls: 'badge badge-gray' };
+  return { text: '不合格', cls: 'badge badge-red' };
+}
+const EICONS = { '説明会':'📢','インターン':'💼','本選考':'🎯' };
+const RICONS = { 'ES':'📝','GD':'👥','面接':'🗣️','筆記試験':'✏️','説明会':'📢','その他':'📋' };
+const fmtDate = d => { if(!d) return ''; const dt=new Date(d); return `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`; };
+const daysUntil = d => { if(!d) return null; return Math.round((new Date(d).setHours(0,0,0,0) - new Date().setHours(0,0,0,0))/86400000); };
+
+// ── Toast ─────────────────────────────────────────────────
+function Toast({msg,onDone}) {
+  useEffect(()=>{ const t=setTimeout(onDone,2000); return ()=>clearTimeout(t); },[]);
+  return html`<div class="toast">${msg}</div>`;
+}
+
+// ── Modal ─────────────────────────────────────────────────
+function Modal({title,onClose,children}) {
+  useEffect(()=>{
+    const h=e=>{if(e.key==='Escape')onClose();};
+    window.addEventListener('keydown',h);
+    return ()=>window.removeEventListener('keydown',h);
+  },[]);
+  return html`
+    <div class="modal-overlay" onClick=${e=>e.target===e.currentTarget&&onClose()}>
+      <div class="modal">
+        <div class="modal-head">
+          <span class="modal-title">${title}</span>
+          <button class="btn btn-ghost btn-sm btn-icon" onClick=${onClose}>✕</button>
+        </div>
+        ${children}
+      </div>
+    </div>`;
+}
+
+// ── Task Modal ────────────────────────────────────────────
+function TaskModal({task,companies,onSave,onDelete,onClose}) {
+  const [f,setF]=useState(task||{title:'',dueDate:'',priority:'1',completed:false,companyId:'',notes:''});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const submit=()=>{ if(!f.title.trim()) return alert('タスク名を入力してください'); onSave({...f,id:task?.id||uid()}); };
+  return html`<${Modal} title=${task?'タスクを編集':'タスクを追加'} onClose=${onClose}>
+    <div class="form-g"><label class="form-label req">タスク名</label>
+      <input class="form-input" value=${f.title} onInput=${e=>s('title',e.target.value)} placeholder="例：〇〇社のES提出"/></div>
+    <div class="form-row">
+      <div class="form-g"><label class="form-label">期限</label>
+        <input type="date" class="form-input" value=${f.dueDate} onInput=${e=>s('dueDate',e.target.value)}/></div>
+      <div class="form-g"><label class="form-label">優先度</label>
+        <select class="form-select" value=${f.priority} onChange=${e=>s('priority',e.target.value)}>
+          <option value="1">🔴 高</option><option value="2">🟡 中</option><option value="3">⚪ 低</option>
+        </select></div>
+    </div>
+    <div class="form-g"><label class="form-label">関連企業</label>
+      <select class="form-select" value=${f.companyId} onChange=${e=>s('companyId',e.target.value)}>
+        <option value="">─ なし ─</option>
+        ${companies.map(c=>html`<option key=${c.id} value=${c.id}>${c.name}</option>`)}
+      </select></div>
+    <div class="form-g"><label class="form-label">メモ</label>
+      <textarea class="form-textarea" value=${f.notes} onInput=${e=>s('notes',e.target.value)} placeholder="補足メモ"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onClick=${onClose}>キャンセル</button>
+      <button class="btn btn-primary" onClick=${submit}>保存</button>
+    </div>
+    ${task&&html`<div class="del-zone"><button class="btn btn-danger btn-sm" onClick=${()=>{if(confirm('削除しますか?'))onDelete(task.id);}}>🗑 削除</button></div>`}
+  </${Modal}>`;
+}
+
+// ── Company Modal ─────────────────────────────────────────
+function CompanyModal({company,onSave,onDelete,onClose}) {
+  const def={name:'',industry:'',status:'エントリー中',rejectionReason:'',notes:'',mypage:{url:'',loginId:'',password:''}};
+  const [f,setF]=useState(company?{...def,...company,mypage:{...def.mypage,...company.mypage}}:def);
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const sm=(k,v)=>setF(x=>({...x,mypage:{...x.mypage,[k]:v}}));
+  const submit=()=>{ if(!f.name.trim()) return alert('企業名を入力してください'); onSave({...f,id:company?.id||uid(),entries:company?.entries||[]}); };
+  return html`<${Modal} title=${company?'企業を編集':'企業を追加'} onClose=${onClose}>
+    <div class="form-g"><label class="form-label req">企業名</label>
+      <input class="form-input" value=${f.name} onInput=${e=>s('name',e.target.value)} placeholder="例：〇〇株式会社"/></div>
+    <div class="form-row">
+      <div class="form-g"><label class="form-label">業界</label>
+        <input class="form-input" value=${f.industry} onInput=${e=>s('industry',e.target.value)} placeholder="例：IT・通信"/></div>
+      <div class="form-g"><label class="form-label">ステータス</label>
+        <select class="form-select" value=${f.status} onChange=${e=>s('status',e.target.value)}>
+          ${['エントリー中','選考中','内定','不合格','辞退'].map(v=>html`<option key=${v}>${v}</option>`)}
+        </select></div>
+    </div>
+    ${f.status==='不合格'&&html`<div class="form-g"><label class="form-label">不合格理由</label>
+      <textarea class="form-textarea" value=${f.rejectionReason} onInput=${e=>s('rejectionReason',e.target.value)} placeholder="気づき・反省点"/></div>`}
+    <div style="border-top:1.5px solid #e2e8f0;margin:12px 0 14px;padding-top:14px">
+      <div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:10px">🔐 マイページ情報</div>
+      <div class="form-g"><label class="form-label">URL</label>
+        <input class="form-input" value=${f.mypage.url} onInput=${e=>sm('url',e.target.value)} placeholder="https://"/></div>
+      <div class="form-row">
+        <div class="form-g"><label class="form-label">ID / メール</label>
+          <input class="form-input" value=${f.mypage.loginId} onInput=${e=>sm('loginId',e.target.value)} placeholder="ログインID"/></div>
+        <div class="form-g"><label class="form-label">パスワード</label>
+          <input class="form-input" type="text" value=${f.mypage.password} onInput=${e=>sm('password',e.target.value)} placeholder="パスワード"/></div>
+      </div>
+    </div>
+    <div class="form-g"><label class="form-label">メモ</label>
+      <textarea class="form-textarea" value=${f.notes} onInput=${e=>s('notes',e.target.value)} placeholder="企業についてのメモ"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onClick=${onClose}>キャンセル</button>
+      <button class="btn btn-primary" onClick=${submit}>保存</button>
+    </div>
+    ${company&&html`<div class="del-zone"><button class="btn btn-danger btn-sm" onClick=${()=>{if(confirm('企業と全エントリーを削除しますか?'))onDelete(company.id);}}>🗑 企業を削除</button></div>`}
+  </${Modal}>`;
+}
+
+// ── Entry Modal ───────────────────────────────────────────
+function EntryModal({entry,onSave,onDelete,onClose}) {
+  const [f,setF]=useState(entry||{type:'インターン',name:'',status:'応募済み',notes:''});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const submit=()=>{ if(!f.name.trim()) return alert('エントリー名を入力してください'); onSave({...f,id:entry?.id||uid(),rounds:entry?.rounds||[]}); };
+  return html`<${Modal} title=${entry?'エントリーを編集':'エントリーを追加'} onClose=${onClose}>
+    <div class="form-row">
+      <div class="form-g"><label class="form-label req">種別</label>
+        <select class="form-select" value=${f.type} onChange=${e=>s('type',e.target.value)}>
+          ${['説明会','インターン','本選考'].map(v=>html`<option key=${v}>${v}</option>`)}
+        </select></div>
+      <div class="form-g"><label class="form-label">ステータス</label>
+        <select class="form-select" value=${f.status} onChange=${e=>s('status',e.target.value)}>
+          ${['応募済み','選考中','参加確定','内定','不合格','辞退'].map(v=>html`<option key=${v}>${v}</option>`)}
+        </select></div>
+    </div>
+    <div class="form-g"><label class="form-label req">エントリー名</label>
+      <input class="form-input" value=${f.name} onInput=${e=>s('name',e.target.value)} placeholder="例：夏インターン2025（3days）"/></div>
+    <div class="form-g"><label class="form-label">メモ</label>
+      <textarea class="form-textarea" value=${f.notes} onInput=${e=>s('notes',e.target.value)}/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onClick=${onClose}>キャンセル</button>
+      <button class="btn btn-primary" onClick=${submit}>保存</button>
+    </div>
+    ${entry&&html`<div class="del-zone"><button class="btn btn-danger btn-sm" onClick=${()=>{if(confirm('削除しますか?'))onDelete(entry.id);}}>🗑 削除</button></div>`}
+  </${Modal}>`;
+}
+
+// ── Round Modal ───────────────────────────────────────────
+function RoundModal({round,onSave,onDelete,onClose}) {
+  const def={name:'',type:'面接',date:'',result:'未定',esContent:'',gdTheme:'',gdDuration:'',gdMembers:'',gdImpressions:'',interviewFormat:'個人',interviewQuestions:'',interviewDuration:'',interviewImpressions:'',testType:'',testDuration:'',testImpressions:'',notes:''};
+  const [f,setF]=useState(round?{...def,...round}:def);
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  const submit=()=>{ if(!f.name) return alert('選考名を選択してください'); onSave({...f,id:round?.id||uid()}); };
+  const NAMES=['書類選考','一次選考','二次選考','三次選考','最終選考','その他'];
+  return html`<${Modal} title=${round?'選考を編集':'選考を追加'} onClose=${onClose}>
+    <div class="form-row">
+      <div class="form-g"><label class="form-label req">選考名</label>
+        <select class="form-select" value=${f.name} onChange=${e=>s('name',e.target.value)}>
+          <option value="">選択...</option>
+          ${NAMES.map(n=>html`<option key=${n}>${n}</option>`)}
+        </select></div>
+      <div class="form-g"><label class="form-label req">種別</label>
+        <select class="form-select" value=${f.type} onChange=${e=>s('type',e.target.value)}>
+          ${['ES','GD','面接','筆記試験','説明会','その他'].map(v=>html`<option key=${v}>${v}</option>`)}
+        </select></div>
+    </div>
+    <div class="form-row">
+      <div class="form-g"><label class="form-label">日付</label>
+        <input type="date" class="form-input" value=${f.date} onInput=${e=>s('date',e.target.value)}/></div>
+      <div class="form-g"><label class="form-label">結果</label>
+        <select class="form-select" value=${f.result} onChange=${e=>s('result',e.target.value)}>
+          ${['未定','待機中','通過','不合格'].map(v=>html`<option key=${v}>${v}</option>`)}
+        </select></div>
+    </div>
+    ${f.type==='ES'&&html`<div class="form-g"><label class="form-label">ES内容（設問・回答）</label>
+      <textarea class="form-textarea" style="min-height:120px" value=${f.esContent} onInput=${e=>s('esContent',e.target.value)} placeholder=${'Q: 自己PR（300字）\nA: '}/></div>`}
+    ${f.type==='GD'&&html`<${Fragment}>
+      <div class="form-g"><label class="form-label">テーマ</label>
+        <input class="form-input" value=${f.gdTheme} onInput=${e=>s('gdTheme',e.target.value)} placeholder="例：無人島に持っていくものを3つ選べ"/></div>
+      <div class="form-row">
+        <div class="form-g"><label class="form-label">時間</label><input class="form-input" value=${f.gdDuration} onInput=${e=>s('gdDuration',e.target.value)} placeholder="例：30分"/></div>
+        <div class="form-g"><label class="form-label">人数</label><input class="form-input" value=${f.gdMembers} onInput=${e=>s('gdMembers',e.target.value)} placeholder="例：6人"/></div>
+      </div>
+      <div class="form-g"><label class="form-label">感想・振り返り</label>
+        <textarea class="form-textarea" value=${f.gdImpressions} onInput=${e=>s('gdImpressions',e.target.value)}/></div>
+    </${Fragment}>`}
+    ${f.type==='面接'&&html`<${Fragment}>
+      <div class="form-row">
+        <div class="form-g"><label class="form-label">形式</label>
+          <select class="form-select" value=${f.interviewFormat} onChange=${e=>s('interviewFormat',e.target.value)}>
+            ${['個人','集団','オンライン','対面'].map(v=>html`<option key=${v}>${v}</option>`)}
+          </select></div>
+        <div class="form-g"><label class="form-label">所要時間</label><input class="form-input" value=${f.interviewDuration} onInput=${e=>s('interviewDuration',e.target.value)} placeholder="例：30分"/></div>
+      </div>
+      <div class="form-g"><label class="form-label">質問・回答内容</label>
+        <textarea class="form-textarea" style="min-height:120px" value=${f.interviewQuestions} onInput=${e=>s('interviewQuestions',e.target.value)} placeholder=${'Q: 学生時代に力を入れたこと\nA: '}/></div>
+      <div class="form-g"><label class="form-label">感想・振り返り</label>
+        <textarea class="form-textarea" value=${f.interviewImpressions} onInput=${e=>s('interviewImpressions',e.target.value)}/></div>
+    </${Fragment}>`}
+    ${f.type==='筆記試験'&&html`<${Fragment}>
+      <div class="form-row">
+        <div class="form-g"><label class="form-label">種類</label><input class="form-input" value=${f.testType} onInput=${e=>s('testType',e.target.value)} placeholder="例：SPI、玉手箱"/></div>
+        <div class="form-g"><label class="form-label">時間</label><input class="form-input" value=${f.testDuration} onInput=${e=>s('testDuration',e.target.value)} placeholder="例：60分"/></div>
+      </div>
+      <div class="form-g"><label class="form-label">感想・振り返り</label>
+        <textarea class="form-textarea" value=${f.testImpressions} onInput=${e=>s('testImpressions',e.target.value)}/></div>
+    </${Fragment}>`}
+    <div class="form-g"><label class="form-label">メモ</label>
+      <textarea class="form-textarea" value=${f.notes} onInput=${e=>s('notes',e.target.value)} placeholder="その他メモ"/></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onClick=${onClose}>キャンセル</button>
+      <button class="btn btn-primary" onClick=${submit}>保存</button>
+    </div>
+    ${round&&html`<div class="del-zone"><button class="btn btn-danger btn-sm" onClick=${()=>{if(confirm('削除しますか?'))onDelete(round.id);}}>🗑 削除</button></div>`}
+  </${Modal}>`;
+}
+
+// ── Round Detail ──────────────────────────────────────────
+function DV({label,value}) {
+  if(!value) return null;
+  return html`<div class="detail-block"><div class="detail-label">${label}</div><div class="detail-val">${value}</div></div>`;
+}
+
+function RoundDetail({round,company,entry,nav,onEdit}) {
+  return html`<div class="content">
+    <div class="breadcrumb">
+      <a onClick=${()=>nav('main')}>ホーム</a>›
+      <a onClick=${()=>nav('cd',{cid:company.id})}>${company.name}</a>›
+      <a onClick=${()=>nav('ed',{cid:company.id,eid:entry.id})}>${entry.name}</a>›
+      <span>${round.name}</span>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div style="font-size:20px;margin-bottom:6px">${RICONS[round.type]||'📋'} ${round.name}</div>
+          <div class="tag-row">
+            <span class="badge badge-purple">${round.type}</span>
+            <span class=${badgeCls(round.result)}>${round.result}</span>
+            ${round.date&&html`<span class="badge badge-gray">📅 ${fmtDate(round.date)}</span>`}
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onClick=${onEdit}>✏️ 編集</button>
+      </div>
+    </div>
+    ${round.type==='ES'&&html`<div class="card"><div class="section-title" style="margin-bottom:12px">📝 ES内容</div><${DV} label="設問・回答" value=${round.esContent}/>${!round.esContent&&html`<div class="empty"><p>ES内容が未入力です</p></div>`}</div>`}
+    ${round.type==='GD'&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:12px">👥 GD内容</div>
+      <${DV} label="テーマ" value=${round.gdTheme}/>
+      <div class="tag-row" style="margin-bottom:10px">
+        ${round.gdDuration&&html`<span class="badge badge-gray">⏱ ${round.gdDuration}</span>`}
+        ${round.gdMembers&&html`<span class="badge badge-gray">👤 ${round.gdMembers}</span>`}
+      </div>
+      <${DV} label="感想・振り返り" value=${round.gdImpressions}/>
+    </div>`}
+    ${round.type==='面接'&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:12px">🗣️ 面接内容</div>
+      <div class="tag-row" style="margin-bottom:10px">
+        ${round.interviewFormat&&html`<span class="badge badge-blue">${round.interviewFormat}</span>`}
+        ${round.interviewDuration&&html`<span class="badge badge-gray">⏱ ${round.interviewDuration}</span>`}
+      </div>
+      <${DV} label="質問・回答内容" value=${round.interviewQuestions}/>
+      <${DV} label="感想・振り返り" value=${round.interviewImpressions}/>
+    </div>`}
+    ${round.type==='筆記試験'&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:12px">✏️ 筆記試験内容</div>
+      <div class="tag-row" style="margin-bottom:10px">
+        ${round.testType&&html`<span class="badge badge-purple">${round.testType}</span>`}
+        ${round.testDuration&&html`<span class="badge badge-gray">⏱ ${round.testDuration}</span>`}
+      </div>
+      <${DV} label="感想・振り返り" value=${round.testImpressions}/>
+    </div>`}
+    ${round.notes&&html`<div class="card"><${DV} label="メモ" value=${round.notes}/></div>`}
+  </div>`;
+}
+
+// ── Entry Detail ──────────────────────────────────────────
+function EntryDetail({entry,company,nav,updateEntry}) {
+  const [rm,setRm]=useState(null);
+  const saveRound=r=>{ const rounds=r.id&&entry.rounds.find(x=>x.id===r.id)?entry.rounds.map(x=>x.id===r.id?r:x):[...entry.rounds,r]; updateEntry({...entry,rounds}); setRm(null); };
+  const delRound=id=>{ updateEntry({...entry,rounds:entry.rounds.filter(r=>r.id!==id)}); setRm(null); };
+  const ORD=['書類選考','一次選考','二次選考','三次選考','最終選考','その他'];
+  const rounds=[...entry.rounds].sort((a,b)=>(ORD.indexOf(a.name)||99)-(ORD.indexOf(b.name)||99));
+  return html`<div class="content">
+    <div class="breadcrumb">
+      <a onClick=${()=>nav('main')}>ホーム</a>›
+      <a onClick=${()=>nav('cd',{cid:company.id})}>${company.name}</a>›
+      <span>${entry.name}</span>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div style="font-size:17px;font-weight:700;margin-bottom:5px">${EICONS[entry.type]||'📋'} ${entry.name}</div>
+          <div class="tag-row">
+            <span class="badge badge-indigo">${entry.type}</span>
+            <span class=${badgeCls(entry.status)}>${entry.status}</span>
+          </div>
+        </div>
+      </div>
+      ${entry.notes&&html`<div style="font-size:13px;color:#64748b;padding-top:8px;border-top:1px solid #f1f5f9;margin-top:8px">${entry.notes}</div>`}
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="section-title">📋 選考ステップ</span>
+        <button class="btn btn-primary btn-sm" onClick=${()=>setRm('add')}>＋ 追加</button>
+      </div>
+      ${rounds.length===0&&html`<div class="empty"><div class="empty-icon">📭</div><p>選考がまだありません</p></div>`}
+      ${rounds.map(r=>html`<div key=${r.id} class="entry-card" onClick=${()=>nav('rd',{cid:company.id,eid:entry.id,rid:r.id})}>
+        <div class="entry-icon">${RICONS[r.type]||'📋'}</div>
+        <div class="entry-body">
+          <div class="entry-title">${r.name}</div>
+          <div class="entry-sub">
+            <span class="badge badge-purple" style="font-size:10px">${r.type}</span>
+            <span class=${badgeCls(r.result)+' '} style="font-size:10px">${r.result}</span>
+            ${r.date&&html`<span class="badge badge-gray" style="font-size:10px">📅 ${fmtDate(r.date)}</span>`}
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-icon" onClick=${e=>{e.stopPropagation();setRm(r);}}>✏️</button>
+        <span class="chevron">›</span>
+      </div>`)}
+    </div>
+    ${rm&&html`<${RoundModal} round=${rm==='add'?null:rm} onSave=${saveRound} onDelete=${delRound} onClose=${()=>setRm(null)}/>`}
+  </div>`;
+}
+
+// ── Company Detail ────────────────────────────────────────
+function CompanyDetail({company,nav,updateCompany}) {
+  const [em,setEm]=useState(null);
+  const [edit,setEdit]=useState(false);
+  const [showPw,setShowPw]=useState(false);
+  const [toast,setToast]=useState('');
+  const copy=async(text,label)=>{ try{await navigator.clipboard.writeText(text);}catch{} setToast(label+'をコピーしました'); };
+  const saveEntry=e=>{ const entries=e.id&&company.entries.find(x=>x.id===e.id)?company.entries.map(x=>x.id===e.id?e:x):[...company.entries,e]; updateCompany({...company,entries}); setEm(null); };
+  const delEntry=id=>{ updateCompany({...company,entries:company.entries.filter(e=>e.id!==id)}); setEm(null); };
+  const mp=company.mypage||{};
+  return html`<div class="content">
+    <div class="breadcrumb"><a onClick=${()=>nav('main')}>ホーム</a>› <span>${company.name}</span></div>
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div style="font-size:19px;font-weight:800;margin-bottom:4px">${company.name}</div>
+          <div class="tag-row">
+            ${company.industry&&html`<span class="badge badge-gray">${company.industry}</span>`}
+            <span class=${badgeCls(company.status)}>${company.status}</span>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onClick=${()=>setEdit(true)}>✏️ 編集</button>
+      </div>
+      ${company.rejectionReason&&html`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 12px;margin-top:8px;font-size:13px;color:#991b1b"><strong>不合格理由：</strong>${company.rejectionReason}</div>`}
+      ${company.notes&&html`<div style="font-size:13px;color:#64748b;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">${company.notes}</div>`}
+    </div>
+    ${(mp.url||mp.loginId||mp.password)&&html`<div class="card">
+      <div class="card-header">
+        <span class="section-title">🔐 マイページ情報</span>
+        <button class="btn btn-ghost btn-sm" onClick=${()=>setShowPw(p=>!p)}>${showPw?'🙈 隠す':'👁 表示'}</button>
+      </div>
+      ${mp.url&&html`<div class="cred-row"><span class="cred-label">URL</span><span class="cred-val" style="font-size:12px">${mp.url}</span><button class="copy-btn" onClick=${()=>copy(mp.url,'URL')}>コピー</button><a href=${mp.url} target="_blank"><button class="copy-btn">開く↗</button></a></div>`}
+      ${mp.loginId&&html`<div class="cred-row"><span class="cred-label">ID</span><span class="cred-val">${mp.loginId}</span><button class="copy-btn" onClick=${()=>copy(mp.loginId,'ID')}>コピー</button></div>`}
+      ${mp.password&&html`<div class="cred-row"><span class="cred-label">PW</span><span class=${`cred-val ${showPw?'':'hidden'}`}>${showPw?mp.password:'••••••••'}</span><button class="copy-btn" onClick=${()=>copy(mp.password,'パスワード')}>コピー</button></div>`}
+    </div>`}
+    <div class="card">
+      <div class="card-header">
+        <span class="section-title">📂 エントリー一覧</span>
+        <button class="btn btn-primary btn-sm" onClick=${()=>setEm('add')}>＋ 追加</button>
+      </div>
+      ${company.entries.length===0&&html`<div class="empty"><div class="empty-icon">📭</div><p>エントリーがまだありません</p></div>`}
+      ${company.entries.map(e=>html`<div key=${e.id} class="entry-card" onClick=${()=>nav('ed',{cid:company.id,eid:e.id})}>
+        <div class="entry-icon">${EICONS[e.type]||'📋'}</div>
+        <div class="entry-body">
+          <div class="entry-title">${e.name}</div>
+          <div class="entry-sub">
+            <span class="badge badge-indigo" style="font-size:10px">${e.type}</span>
+            <span class=${badgeCls(e.status)+' '} style="font-size:10px">${e.status}</span>
+            ${e.rounds.length>0&&html`<span class="badge badge-gray" style="font-size:10px">${e.rounds.length}選考</span>`}
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-icon" onClick=${ev=>{ev.stopPropagation();setEm(e);}}>✏️</button>
+        <span class="chevron">›</span>
+      </div>`)}
+    </div>
+    ${em&&html`<${EntryModal} entry=${em==='add'?null:em} onSave=${saveEntry} onDelete=${delEntry} onClose=${()=>setEm(null)}/>`}
+    ${edit&&html`<${CompanyModal} company=${company} onSave=${c=>{updateCompany(c);setEdit(false);}} onDelete=${()=>{}} onClose=${()=>setEdit(false)}/>`}
+    ${toast&&html`<${Toast} msg=${toast} onDone=${()=>setToast('')}/>`}
+  </div>`;
+}
+
+// ── Company List ──────────────────────────────────────────
+function CompanyList({companies,nav,onAdd}) {
+  const [q,setQ]=useState('');
+  const list=companies.filter(c=>c.name.includes(q)||c.industry?.includes(q));
+  return html`<div class="content">
+    <input class="form-input" value=${q} onInput=${e=>setQ(e.target.value)} placeholder="🔍 企業名・業界で検索..." style="margin-bottom:12px"/>
+    ${list.length===0&&html`<div class="empty"><div class="empty-icon">🏢</div><p>企業が見つかりません</p></div>`}
+    ${list.map(c=>html`<div key=${c.id} class="company-list-item" onClick=${()=>nav('cd',{cid:c.id})}>
+      <div style="font-size:22px">🏢</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:700">${c.name}</div>
+        <div style="font-size:12px;color:#94a3b8">${c.industry||'業界未設定'} · ${c.entries.length}件エントリー</div>
+      </div>
+      ${(()=>{ const ds=computeDisplayStatus(c); return html`<span class=${ds.cls}>${ds.text}</span>`; })()}
+      <span class="chevron">›</span>
+    </div>`)}
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;justify-content:center" onClick=${onAdd}>＋ 企業を追加</button>
+  </div>`;
+}
+
+// ── Main View ─────────────────────────────────────────────
+function MainView({companies,tasks,nav,onAddTask,onToggle,onEditTask,onAddCo}) {
+  const [showDone,setShowDone]=useState(false);
+  const active=tasks.filter(t=>!t.completed).sort((a,b)=>{
+    if(a.priority!==b.priority) return a.priority-b.priority;
+    if(!a.dueDate&&!b.dueDate) return 0;
+    if(!a.dueDate) return 1; if(!b.dueDate) return -1;
+    return new Date(a.dueDate)-new Date(b.dueDate);
+  });
+  const done=tasks.filter(t=>t.completed);
+  const urgentCnt=active.filter(t=>t.dueDate&&daysUntil(t.dueDate)<=1).length;
+  const getCls=t=>{ const d=daysUntil(t.dueDate); const p=`p${t.priority}`; if(d!==null&&d<0) return `task-item ${p} overdue`; if(d!==null&&d<=2) return `task-item ${p} due-soon`; return `task-item ${p}`; };
+  const getDue=t=>{ if(!t.dueDate) return null; const d=daysUntil(t.dueDate); if(d<0) return html`<span class="overdue-label">⚠️ 期限切れ (${fmtDate(t.dueDate)})</span>`; if(d===0) return html`<span class="soon-label">🔥 今日が期限！</span>`; if(d===1) return html`<span class="soon-label">⏰ 明日が期限</span>`; if(d<=3) return html`<span class="soon-label">📅 ${fmtDate(t.dueDate)}（あと${d}日）</span>`; return html`<span>📅 ${fmtDate(t.dueDate)}</span>`; };
+  const coName=id=>companies.find(c=>c.id===id)?.name||'';
+  const TaskRow=({t})=>html`<div class=${getCls(t)}>
+    <div class=${`task-check ${t.completed?'checked':''}`} onClick=${()=>onToggle(t.id)}>${t.completed?'✓':''}</div>
+    <div class="task-body">
+      <div class=${`task-title ${t.completed?'task-done':''}`}>${t.title}</div>
+      <div class="task-meta">
+        ${t.priority==='1'&&html`<span style="color:#ef4444;font-weight:700">🔴 高</span>`}
+        ${t.priority==='2'&&html`<span style="color:#f59e0b;font-weight:700">🟡 中</span>`}
+        ${t.priority==='3'&&html`<span style="color:#94a3b8">⚪ 低</span>`}
+        ${getDue(t)}
+        ${t.companyId&&html`<span>🏢 ${coName(t.companyId)}</span>`}
+      </div>
+      ${t.notes&&html`<div style="font-size:11px;color:#94a3b8;margin-top:2px">${t.notes}</div>`}
+    </div>
+    <button class="btn btn-ghost btn-sm btn-icon" onClick=${()=>onEditTask(t)}>✏️</button>
+  </div>`;
+  return html`<div class="content">
+    ${urgentCnt>0&&html`<div class="warn-bar">⚠️ 期限が近いタスクが <strong>${urgentCnt}件</strong> あります</div>`}
+    <div class="card">
+      <div class="card-header">
+        <span class="section-title">✅ 今のタスク</span>
+        <button class="btn btn-primary btn-sm" onClick=${onAddTask}>＋ 追加</button>
+      </div>
+      ${active.length===0&&html`<div class="empty" style="padding:20px 0"><div class="empty-icon">🎉</div><p>タスクはありません！</p></div>`}
+      ${active.map(t=>html`<${TaskRow} key=${t.id} t=${t}/>`)}
+      ${done.length>0&&html`<div style="margin-top:8px">
+        <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;color:#94a3b8" onClick=${()=>setShowDone(p=>!p)}>
+          ${showDone?'▲':'▼'} 完了済み (${done.length})
+        </button>
+        ${showDone&&done.map(t=>html`<${TaskRow} key=${t.id} t=${t}/>`)}
+      </div>`}
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="section-title">🏢 選考状況</span>
+        <button class="btn btn-ghost btn-sm" onClick=${()=>nav('cl')}>一覧を見る →</button>
+      </div>
+      ${companies.length===0&&html`<div class="empty" style="padding:20px 0">
+        <div class="empty-icon">🏢</div><p>企業がまだ登録されていません</p>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px" onClick=${onAddCo}>＋ 企業を追加</button>
+      </div>`}
+      ${companies.length>0&&html`<${Fragment}>
+        <div class="company-grid">
+          ${companies.map(c=>{ const ds=computeDisplayStatus(c); return html`<div key=${c.id} class="company-mini" onClick=${()=>nav('cd',{cid:c.id})}>
+            <div class="company-mini-name" title=${c.name}>${c.name}</div>
+            <span class=${ds.cls} style="font-size:10px">${ds.text}</span>
+            ${c.entries.length>0&&html`<div style="font-size:10px;color:#94a3b8;margin-top:4px">${c.entries.length}件</div>`}
+          </div>`; })}
+        </div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:10px;width:100%;justify-content:center" onClick=${onAddCo}>＋ 企業を追加</button>
+      </${Fragment}>`}
+    </div>
+    ${companies.length>0&&html`<div class="stats-row">
+      ${[{l:'エントリー中',v:companies.filter(c=>c.status==='エントリー中').length,col:'#6366f1'},{l:'選考中',v:companies.filter(c=>c.status==='選考中').length,col:'#2563eb'},{l:'内定',v:companies.filter(c=>c.status==='内定').length,col:'#16a34a'}].map(s=>html`
+        <div key=${s.l} class="stat-card"><div class="stat-num" style="color:${s.col}">${s.v}</div><div class="stat-label">${s.l}</div></div>
+      `)}
+    </div>`}
+  </div>`;
+}
+
+// ── App ───────────────────────────────────────────────────
+function App() {
+  const [cos,setCos]=useState([]);
+  const [tasks,setTasks]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [nav,setNav]=useState({view:'main'});
+  const [taskModal,setTaskModal]=useState(null);
+  const [coModal,setCoModal]=useState(null);
+  const [roundModal,setRoundModal]=useState(null);
+
+  useEffect(()=>{
+    let coOk=false,tkOk=false;
+    const done=()=>{ if(coOk&&tkOk) setLoading(false); };
+    const unsubCo=db.collection(COL.co).onSnapshot(snap=>{
+      const data=snap.docs.map(d=>({...d.data(),id:d.id}));
+      setCos(data); coOk=true; done();
+      // 初回マイグレーション: Firestoreが空でlocalStorageにデータがあれば移行
+      if(data.length===0){ const loc=lsLoad(SK.co); if(loc.length>0){ const b=db.batch(); loc.forEach(c=>{ const {id,...d}=c; b.set(db.collection(COL.co).doc(id),d); }); b.commit(); } }
+    });
+    const unsubTk=db.collection(COL.tk).onSnapshot(snap=>{
+      const data=snap.docs.map(d=>({...d.data(),id:d.id}));
+      setTasks(data); tkOk=true; done();
+      if(data.length===0){ const loc=lsLoad(SK.tk); if(loc.length>0){ const b=db.batch(); loc.forEach(t=>{ const {id,...d}=t; b.set(db.collection(COL.tk).doc(id),d); }); b.commit(); } }
+    });
+    return ()=>{ unsubCo(); unsubTk(); };
+  },[]);
+
+  useEffect(()=>{
+    if(loading) return;
+    if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
+    const urgent=tasks.filter(t=>!t.completed&&t.dueDate&&daysUntil(t.dueDate)<=0);
+    if(urgent.length>0 && Notification.permission==='granted')
+      new Notification('就活管理 - 期限切れタスク',{body:urgent.map(t=>t.title).join(', ')});
+  },[loading]);
+
+  const navigate=(view,p={})=>setNav({view,...p});
+  const getCo=id=>cos.find(c=>c.id===id);
+  const getEn=(cid,eid)=>getCo(cid)?.entries.find(e=>e.id===eid);
+  const getRd=(cid,eid,rid)=>getEn(cid,eid)?.rounds.find(r=>r.id===rid);
+  const updCo=c=>fsSet(COL.co,c);
+  const updEn=(cid,en)=>{ const co=getCo(cid); if(!co) return; fsUpd(COL.co,cid,{entries:co.entries.map(e=>e.id===en.id?en:e)}); };
+
+  const saveTask=t=>{ const id=t.id||uid(); fsSet(COL.tk,{...t,id}); setTaskModal(null); };
+  const delTask=id=>{ fsDel(COL.tk,id); setTaskModal(null); };
+  const toggleTask=id=>{ const t=tasks.find(x=>x.id===id); if(t) fsUpd(COL.tk,id,{completed:!t.completed}); };
+  const saveCo=c=>{ const id=c.id||uid(); fsSet(COL.co,{...c,id,entries:c.entries||[]}); setCoModal(null); };
+  const delCo=id=>{ fsDel(COL.co,id); setCoModal(null); navigate('main'); };
+
+  const TITLES={main:'就活管理',cl:'企業一覧',cd:getCo(nav.cid)?.name||'企業詳細',ed:getEn(nav.cid,nav.eid)?.name||'エントリー詳細',rd:getRd(nav.cid,nav.eid,nav.rid)?.name||'選考詳細'};
+  const goBack=()=>{
+    if(nav.view==='cl'||nav.view==='cd') navigate('main');
+    else if(nav.view==='ed') navigate('cd',{cid:nav.cid});
+    else if(nav.view==='rd') navigate('ed',{cid:nav.cid,eid:nav.eid});
+  };
+
+  const body=()=>{
+    if(nav.view==='main') return html`<${MainView} companies=${cos} tasks=${tasks} nav=${navigate} onAddTask=${()=>setTaskModal('add')} onToggle=${toggleTask} onEditTask=${t=>setTaskModal(t)} onAddCo=${()=>setCoModal('add')}/>`;
+    if(nav.view==='cl') return html`<${CompanyList} companies=${cos} nav=${navigate} onAdd=${()=>setCoModal('add')}/>`;
+    if(nav.view==='cd'){ const c=getCo(nav.cid); return c?html`<${CompanyDetail} company=${c} nav=${navigate} updateCompany=${updCo}/>`:''; }
+    if(nav.view==='ed'){ const c=getCo(nav.cid),e=getEn(nav.cid,nav.eid); return (c&&e)?html`<${EntryDetail} entry=${e} company=${c} nav=${navigate} updateEntry=${en=>updEn(c.id,en)}/>`:''; }
+    if(nav.view==='rd'){ const c=getCo(nav.cid),e=getEn(nav.cid,nav.eid),r=getRd(nav.cid,nav.eid,nav.rid);
+      return (c&&e&&r)?html`<${RoundDetail} round=${r} company=${c} entry=${e} nav=${navigate} onEdit=${()=>setRoundModal(r)}/>`:''; }
+  };
+
+  if(loading) return html`<div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px;color:#64748b"><div style="font-size:32px">📋</div><div style="font-size:14px">データを読み込み中...</div></div>`;
+
+  return html`<div class="app">
+    <div class="header">
+      ${nav.view!=='main'&&html`<button class="back-btn" onClick=${goBack}>← 戻る</button>`}
+      <h1>${TITLES[nav.view]||'就活管理'}</h1>
+      ${nav.view==='main'&&html`<button class="back-btn" onClick=${()=>navigate('cl')}>🏢 企業一覧</button>`}
+    </div>
+    ${body()}
+    ${taskModal&&html`<${TaskModal} task=${taskModal==='add'?null:taskModal} companies=${cos} onSave=${saveTask} onDelete=${delTask} onClose=${()=>setTaskModal(null)}/>`}
+    ${coModal&&html`<${CompanyModal} company=${coModal==='add'?null:coModal} onSave=${saveCo} onDelete=${delCo} onClose=${()=>setCoModal(null)}/>`}
+    ${roundModal&&html`<${RoundModal} round=${roundModal} onSave=${rd=>{ const e=getEn(nav.cid,nav.eid); updEn(nav.cid,{...e,rounds:e.rounds.map(r=>r.id===rd.id?rd:r)}); setRoundModal(null); }} onDelete=${rid=>{ const e=getEn(nav.cid,nav.eid); updEn(nav.cid,{...e,rounds:e.rounds.filter(r=>r.id!==rid)}); setRoundModal(null); navigate('ed',{cid:nav.cid,eid:nav.eid}); }} onClose=${()=>setRoundModal(null)}/>`}
+  </div>`;
+}
+
+render(html`<${App}/>`, document.getElementById('root'));
+</script>
+</body>
+</html>
