@@ -15,7 +15,8 @@
     #root { min-height: 100vh; }
     .app { max-width: 900px; margin: 0 auto; padding: 0 0 80px; }
     .header { background: #1e40af; color: white; padding: 14px 20px; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
-    .header h1 { font-size: 18px; font-weight: 700; flex: 1; }
+    .header h1 { font-size: 18px; font-weight: 700; margin: 0; }
+    .header-title { flex: 1; min-width: 0; }
     .back-btn { background: rgba(255,255,255,.2); border: none; color: white; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 14px; }
     .back-btn:hover { background: rgba(255,255,255,.3); }
     .content { padding: 16px; }
@@ -101,6 +102,10 @@
     .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1e293b; color: white; padding: 10px 20px; border-radius: 99px; font-size: 13px; font-weight: 600; z-index: 300; box-shadow: 0 4px 12px rgba(0,0,0,.3); pointer-events: none; }
     .section-sep { height: 1px; background: #f1f5f9; margin: 12px 0; }
     .tag-row { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+    @media(max-width:500px){ .form-row { grid-template-columns: 1fr; } }
+    .tab-bar { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 12px; }
+    .bar-bg { background: #f1f5f9; border-radius: 4px; height: 12px; flex: 1; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; background: #dc2626; transition: width .3s; }
   </style>
 </head>
 <body>
@@ -135,58 +140,32 @@ const fsDel = (col, id) => db.collection(col).doc(id).delete();
 const fsUpd = (col, id, data) => db.collection(col).doc(id).update(data);
 
 // ── Helpers ──────────────────────────────────────────────
-const SC = { '応募済み':'badge-gray','選考中':'badge-blue','書類選考中':'badge-indigo','内定':'badge-green','参加確定':'badge-green','不合格':'badge-red','辞退':'badge-gray','通過':'badge-green','未定':'badge-gray','待機中':'badge-amber','エントリー中':'badge-indigo' };
+const SC = { '応募済み':'badge-gray','選考中':'badge-blue','書類選考中':'badge-indigo','内定':'badge-green','参加確定':'badge-green','インターン参加確定':'badge-green','不合格':'badge-red','辞退':'badge-gray','通過':'badge-green','未定':'badge-gray','待機中':'badge-amber','エントリー中':'badge-indigo' };
 const badgeCls = s => 'badge ' + (SC[s]||'badge-gray');
 
 // エントリー・ラウンド情報から最新の選考状況を導出
 function computeDisplayStatus(company) {
-  const entries = company.entries || [];
-  if (entries.length === 0) return { text: company.status || 'エントリー中', cls: badgeCls(company.status || 'エントリー中') };
-
-  const P = { '内定':0, '参加確定':1, '選考中':2, '応募済み':3, '不合格':8, '辞退':9 };
-  const sorted = [...entries].sort((a,b) => (P[a.status]??5) - (P[b.status]??5));
-  const best = sorted[0];
-
-  if (best.status === '内定') {
-    return best.type === '本選考'
-      ? { text: '🎉 内定', cls: 'badge badge-green' }
-      : { text: `${best.type}内定`, cls: 'badge badge-green' };
-  }
-
-  if (best.status === '参加確定') {
-    return { text: `${best.type}参加確定`, cls: 'badge badge-green' };
-  }
-
-  if (best.status === '選考中') {
-    const rounds = best.rounds || [];
-    const pending = rounds.filter(r => r.result === '待機中');
-    const passed  = rounds.filter(r => r.result === '通過');
-
-    if (pending.length > 0) {
-      const last = pending[pending.length - 1];
-      return { text: `${last.name} 結果待ち`, cls: 'badge badge-amber' };
-    }
-    if (passed.length > 0) {
-      return { text: `${passed[passed.length-1].name} 通過`, cls: 'badge badge-blue' };
-    }
-    // ラウンド情報なし
-    if (best.type === '本選考') return { text: '本選考 選考中', cls: 'badge badge-indigo' };
-    return { text: `${best.type} 選考中`, cls: 'badge badge-blue' };
-  }
-
-  if (best.status === '応募済み') {
-    return { text: `${best.type} 応募済み`, cls: 'badge badge-gray' };
-  }
-
-  // 全エントリーが不合格または辞退
-  const allWithdraw = entries.every(e => e.status === '辞退');
-  if (allWithdraw) return { text: '辞退', cls: 'badge badge-gray' };
-  return { text: '不合格', cls: 'badge badge-red' };
+  const status = company.status || 'エントリー中';
+  return { text: status, cls: badgeCls(status) };
 }
 const EICONS = { '説明会':'📢','インターン':'💼','本選考':'🎯' };
 const RICONS = { 'ES':'📝','GD':'👥','面接':'🗣️','筆記試験':'✏️','説明会':'📢','その他':'📋' };
 const fmtDate = d => { if(!d) return ''; const dt=new Date(d); return `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')}`; };
 const daysUntil = d => { if(!d) return null; return Math.round((new Date(d).setHours(0,0,0,0) - new Date().setHours(0,0,0,0))/86400000); };
+
+function extractESMeta(content) {
+  if (!content) return { episode: null, charCounts: [] };
+  const epMatch = content.match(/【使用エピソード】([^\n]+)/);
+  const episode = epMatch ? epMatch[1].trim() : null;
+  const counts = new Set();
+  const re = /[（(](\d+)[字文](?:字)?(?:以内|程度)?[）)]/g;
+  let m;
+  while ((m = re.exec(content)) !== null) {
+    const n = parseInt(m[1]);
+    if (n >= 50) counts.add(n);
+  }
+  return { episode, charCounts: [...counts].sort((a,b)=>a-b) };
+}
 
 // ── Toast ─────────────────────────────────────────────────
 function Toast({msg,onDone}) {
@@ -259,7 +238,7 @@ function CompanyModal({company,onSave,onDelete,onClose}) {
         <input class="form-input" value=${f.industry} onInput=${e=>s('industry',e.target.value)} placeholder="例：IT・通信"/></div>
       <div class="form-g"><label class="form-label">ステータス</label>
         <select class="form-select" value=${f.status} onChange=${e=>s('status',e.target.value)}>
-          ${['エントリー中','選考中','内定','不合格','辞退'].map(v=>html`<option key=${v}>${v}</option>`)}
+          ${['エントリー中','選考中','内定','インターン参加確定','不合格','辞退'].map(v=>html`<option key=${v}>${v}</option>`)}
         </select></div>
     </div>
     ${f.status==='不合格'&&html`<div class="form-g"><label class="form-label">不合格理由</label>
@@ -315,7 +294,7 @@ function EntryModal({entry,onSave,onDelete,onClose}) {
 
 // ── Round Modal ───────────────────────────────────────────
 function RoundModal({round,onSave,onDelete,onClose}) {
-  const def={name:'',type:'面接',date:'',result:'未定',esContent:'',gdTheme:'',gdDuration:'',gdMembers:'',gdImpressions:'',interviewFormat:'個人',interviewQuestions:'',interviewDuration:'',interviewImpressions:'',testType:'',testDuration:'',testImpressions:'',notes:''};
+  const def={name:'',type:'面接',date:'',result:'未定',esContent:'',esEpisode:'',esCharCount:'',gdTheme:'',gdDuration:'',gdMembers:'',gdImpressions:'',interviewFormat:'個人',interviewQuestions:'',interviewDuration:'',interviewImpressions:'',testType:'',testDuration:'',testImpressions:'',notes:''};
   const [f,setF]=useState(round?{...def,...round}:def);
   const s=(k,v)=>setF(x=>({...x,[k]:v}));
   const submit=()=>{ if(!f.name) return alert('選考名を選択してください'); onSave({...f,id:round?.id||uid()}); };
@@ -340,8 +319,22 @@ function RoundModal({round,onSave,onDelete,onClose}) {
           ${['未定','待機中','通過','不合格'].map(v=>html`<option key=${v}>${v}</option>`)}
         </select></div>
     </div>
-    ${f.type==='ES'&&html`<div class="form-g"><label class="form-label">ES内容（設問・回答）</label>
-      <textarea class="form-textarea" style="min-height:120px" value=${f.esContent} onInput=${e=>s('esContent',e.target.value)} placeholder=${'Q: 自己PR（300字）\nA: '}/></div>`}
+    ${f.type==='ES'&&html`<${Fragment}>
+      <div class="form-row">
+        <div class="form-g"><label class="form-label">エピソード</label>
+          <select class="form-select" value=${f.esEpisode} onChange=${e=>s('esEpisode',e.target.value)}>
+            <option value="">選択...</option>
+            ${['アパレルバイト','サークル幹部・会計','防災アプリ','サークル活動','その他'].map(v=>html`<option key=${v}>${v}</option>`)}
+          </select></div>
+        <div class="form-g"><label class="form-label">文字数</label>
+          <select class="form-select" value=${f.esCharCount} onChange=${e=>s('esCharCount',e.target.value)}>
+            <option value="">選択...</option>
+            ${['50','100','200','300','400','500','600以上'].map(v=>html`<option key=${v}>${v}</option>`)}
+          </select></div>
+      </div>
+      <div class="form-g"><label class="form-label">ES内容（設問・回答）</label>
+        <textarea class="form-textarea" style="min-height:120px" value=${f.esContent} onInput=${e=>s('esContent',e.target.value)} placeholder=${'Q: 自己PR（300字）\nA: '}/></div>
+    </${Fragment}>`}
     ${f.type==='GD'&&html`<${Fragment}>
       <div class="form-g"><label class="form-label">テーマ</label>
         <input class="form-input" value=${f.gdTheme} onInput=${e=>s('gdTheme',e.target.value)} placeholder="例：無人島に持っていくものを3つ選べ"/></div>
@@ -554,7 +547,7 @@ function CompanyDetail({company,nav,updateCompany}) {
 // ── Company List ──────────────────────────────────────────
 function CompanyList({companies,nav,onAdd}) {
   const [q,setQ]=useState('');
-  const list=companies.filter(c=>c.name.includes(q)||c.industry?.includes(q));
+  const list=companies.filter(c=>c.name.includes(q)||c.industry?.includes(q)).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
   return html`<div class="content">
     <input class="form-input" value=${q} onInput=${e=>setQ(e.target.value)} placeholder="🔍 企業名・業界で検索..." style="margin-bottom:12px"/>
     ${list.length===0&&html`<div class="empty"><div class="empty-icon">🏢</div><p>企業が見つかりません</p></div>`}
@@ -627,7 +620,7 @@ function MainView({companies,tasks,nav,onAddTask,onToggle,onEditTask,onAddCo}) {
       </div>`}
       ${companies.length>0&&html`<${Fragment}>
         <div class="company-grid">
-          ${companies.map(c=>{ const ds=computeDisplayStatus(c); return html`<div key=${c.id} class="company-mini" onClick=${()=>nav('cd',{cid:c.id})}>
+          ${[...companies].sort((a,b)=>a.name.localeCompare(b.name,'ja')).map(c=>{ const ds=computeDisplayStatus(c); return html`<div key=${c.id} class="company-mini" onClick=${()=>nav('cd',{cid:c.id})}>
             <div class="company-mini-name" title=${c.name}>${c.name}</div>
             <span class=${ds.cls} style="font-size:10px">${ds.text}</span>
             ${c.entries.length>0&&html`<div style="font-size:10px;color:#94a3b8;margin-top:4px">${c.entries.length}件</div>`}
@@ -644,12 +637,173 @@ function MainView({companies,tasks,nav,onAddTask,onToggle,onEditTask,onAddCo}) {
   </div>`;
 }
 
+// ── Stats View ────────────────────────────────────────────
+function StatsView({companies,nav}) {
+  const [tab,setTab]=useState('全体');
+  const [openRound,setOpenRound]=useState(null);
+  const [openEp,setOpenEp]=useState(null);
+  const [openChar,setOpenChar]=useState(null);
+  const TABS=['全体','インターン','本選考','説明会'];
+  const allEntries=[];
+  companies.forEach(co=>(co.entries||[]).forEach(en=>allEntries.push({...en,coName:co.name,coId:co.id})));
+  const entries=tab==='全体'?allEntries:allEntries.filter(e=>e.type===tab);
+  const total=entries.length;
+  const ongoing=entries.filter(e=>['選考中','応募済み'].includes(e.status)).length;
+
+  const isEx=e=>(e.notes||'').match(/ES免除|適性検査免除|SPI免除|テスト免除/);
+  const rateBase=entries.filter(e=>e.type!=='説明会');
+  const exemptCount=rateBase.filter(isEx).length;
+  const decided=rateBase.filter(e=>['参加確定','内定','不合格'].includes(e.status));
+  const passedCount=decided.filter(e=>['参加確定','内定'].includes(e.status)).length;
+  const failedCount=decided.filter(e=>e.status==='不合格').length;
+  const passDisp=decided.length===0?'－':`${passedCount}/${decided.length}企業`+(exemptCount>0?`（免除${exemptCount}企業）`:'');
+
+  const RORD=['書類選考','一次選考','二次選考','三次選考','最終選考','その他'];
+  const failByRound={};
+  entries.filter(e=>e.status==='不合格').forEach(e=>{
+    const sorted=[...(e.rounds||[])].sort((a,b)=>RORD.indexOf(a.name)-RORD.indexOf(b.name));
+    const fr=sorted.find(r=>r.result==='不合格');
+    const key=fr?fr.name+'（'+fr.type+'）':'書類選考前';
+    if(!failByRound[key])failByRound[key]={count:0,cos:[]};
+    failByRound[key].count++;
+    failByRound[key].cos.push({name:e.coName,id:e.coId});
+  });
+
+  const esRounds=[];
+  entries.forEach(e=>(e.rounds||[]).filter(r=>r.type==='ES').forEach(r=>{
+    const episode=r.esEpisode||extractESMeta(r.esContent).episode;
+    const charCounts=r.esCharCount?[r.esCharCount==='600以上'?600:parseInt(r.esCharCount)]:extractESMeta(r.esContent).charCounts;
+    esRounds.push({...r,coName:e.coName,coId:e.coId,episode,charCounts});
+  }));
+  const esByEp={};
+  esRounds.filter(r=>r.episode).forEach(r=>{
+    if(!esByEp[r.episode])esByEp[r.episode]={pass:0,fail:0,cos:[]};
+    if(r.result==='通過')esByEp[r.episode].pass++;
+    if(r.result==='不合格')esByEp[r.episode].fail++;
+    esByEp[r.episode].cos.push({name:r.coName,id:r.coId,result:r.result});
+  });
+  const esByChar={};
+  esRounds.forEach(r=>r.charCounts.forEach(n=>{
+    if(!esByChar[n])esByChar[n]={pass:0,fail:0,cos:[]};
+    if(r.result==='通過')esByChar[n].pass++;
+    if(r.result==='不合格')esByChar[n].fail++;
+    esByChar[n].cos.push({name:r.coName,id:r.coId,result:r.result});
+  }));
+
+  const fmtES=(s)=>s.pass+s.fail===0?'－':`${s.pass}/${s.pass+s.fail}件`;
+
+  return html`<div class="content">
+    <div class="tab-bar">${TABS.map(t=>html`<button key=${t} class=${'btn btn-sm '+(tab===t?'btn-primary':'btn-ghost')} onClick=${()=>setTab(t)}>${t}</button>`)}</div>
+    <div class="stats-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:8px">
+      <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">総数</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#16a34a">${passedCount}</div><div class="stat-label">通過</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#dc2626">${failedCount}</div><div class="stat-label">不合格</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:#2563eb">${ongoing}</div><div class="stat-label">選考中</div></div>
+    </div>
+    ${tab!=='説明会'&&html`<div class="card" style="margin-bottom:12px;text-align:center">
+      <div style="font-size:11px;color:#64748b;margin-bottom:4px">通過（説明会除く）</div>
+      <div style="font-size:20px;font-weight:700;color:#7c3aed">${passDisp}</div>
+    </div>`}
+    ${Object.keys(failByRound).length>0&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:10px">📉 脱落ステップ内訳</div>
+      ${Object.entries(failByRound).sort((a,b)=>b[1].count-a[1].count).map(([k,v])=>html`<div key=${k} style="margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px;border-radius:4px;background:${openRound===k?'#fef2f2':'transparent'}" onClick=${()=>setOpenRound(openRound===k?null:k)}>
+          <span style="font-size:12px;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${k}</span>
+          <div class="bar-bg" style="min-width:50px"><div class="bar-fill" style=${'width:'+Math.round(v.count/(failedCount||1)*100)+'%'}></div></div>
+          <span style="font-size:13px;font-weight:700;color:#dc2626;flex-shrink:0">${v.count}件 ${openRound===k?'▲':'▼'}</span>
+        </div>
+        ${openRound===k&&html`<div style="padding:6px 8px;background:#fef2f2;border-radius:4px;margin-top:2px;display:flex;flex-wrap:wrap;gap:4px">
+          ${v.cos.map(c=>html`<span style="font-size:11px;background:white;border:1px solid #fca5a5;border-radius:10px;padding:2px 8px;cursor:pointer" onClick=${()=>nav('cd',{cid:c.id})}>${c.name}</span>`)}
+        </div>`}
+      </div>`)}
+    </div>`}
+    ${Object.keys(esByEp).length>0&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:10px">📝 ESエピソード別</div>
+      ${Object.entries(esByEp).sort((a,b)=>(b[1].pass+b[1].fail)-(a[1].pass+a[1].fail)).map(([ep,s])=>html`<div key=${ep} style="margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px;border-radius:4px;background:${openEp===ep?'#f5f3ff':'transparent'}" onClick=${()=>setOpenEp(openEp===ep?null:ep)}>
+          <span style="font-size:12px;flex:1">${ep}</span>
+          <span style="font-size:13px;font-weight:700;color:#7c3aed">${fmtES(s)} ${openEp===ep?'▲':'▼'}</span>
+        </div>
+        ${openEp===ep&&html`<div style="padding:6px 8px;background:#f5f3ff;border-radius:4px;margin-top:2px;display:flex;flex-wrap:wrap;gap:4px">
+          ${s.cos.map(c=>html`<span style="font-size:11px;background:white;border:1px solid ${c.result==='通過'?'#86efac':'#fca5a5'};border-radius:10px;padding:2px 8px;cursor:pointer" onClick=${()=>nav('cd',{cid:c.id})}>${c.name} ${c.result==='通過'?'✓':'✗'}</span>`)}
+        </div>`}
+      </div>`)}
+    </div>`}
+    ${Object.keys(esByChar).length>0&&html`<div class="card">
+      <div class="section-title" style="margin-bottom:10px">📏 ES文字数別</div>
+      ${Object.entries(esByChar).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([n,s])=>html`<div key=${n} style="margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px;border-radius:4px;background:${openChar===n?'#f5f3ff':'transparent'}" onClick=${()=>setOpenChar(openChar===n?null:n)}>
+          <span style="font-size:13px;font-weight:700;width:55px;flex-shrink:0">${n}字</span>
+          <span style="font-size:13px;font-weight:700;color:#7c3aed">${fmtES(s)} ${openChar===n?'▲':'▼'}</span>
+        </div>
+        ${openChar===n&&html`<div style="padding:6px 8px;background:#f5f3ff;border-radius:4px;margin-top:2px;display:flex;flex-wrap:wrap;gap:4px">
+          ${s.cos.map(c=>html`<span style="font-size:11px;background:white;border:1px solid ${c.result==='通過'?'#86efac':'#fca5a5'};border-radius:10px;padding:2px 8px;cursor:pointer" onClick=${()=>nav('cd',{cid:c.id})}>${c.name} ${c.result==='通過'?'✓':'✗'}</span>`)}
+        </div>`}
+      </div>`)}
+    </div>`}
+    ${esRounds.length===0&&html`<div class="empty"><div class="empty-icon">📊</div><p>ESデータがまだありません</p></div>`}
+  </div>`;
+}
+
+// ── ES DB View ────────────────────────────────────────────
+function ESDBView({companies, onTitleChange, nav}) {
+  const [filterChar,setFilterChar]=useState('');
+  const [filterEp,setFilterEp]=useState('');
+  useEffect(()=>{ return ()=>onTitleChange(''); },[]);
+  useEffect(()=>{
+    const parts=[];
+    if(filterEp) parts.push(filterEp);
+    if(filterChar) parts.push(filterChar+'字');
+    onTitleChange(parts.join(' / '));
+  },[filterEp,filterChar]);
+  const EP_ORDER=['アパレルバイト','サークル幹部・会計','防災アプリ','サークル活動','その他'];
+  const allES=[];
+  companies.forEach(co=>(co.entries||[]).forEach(en=>(en.rounds||[]).filter(r=>r.type==='ES'&&r.esContent).forEach(r=>{
+    const episode=r.esEpisode||extractESMeta(r.esContent).episode;
+    const charCounts=r.esCharCount?[r.esCharCount==='600以上'?600:parseInt(r.esCharCount)]:extractESMeta(r.esContent).charCounts;
+    allES.push({...r,coId:co.id,coName:co.name,entryName:en.name,entryType:en.type,episode,charCounts});
+  })));
+  const allChars=[...new Set(allES.flatMap(e=>e.charCounts))].sort((a,b)=>a-b);
+  const allEps=[...new Set(allES.filter(e=>e.episode).map(e=>e.episode))].sort((a,b)=>EP_ORDER.indexOf(a)-EP_ORDER.indexOf(b));
+  const filtered=allES.filter(e=>{
+    if(filterChar&&!e.charCounts.includes(parseInt(filterChar)))return false;
+    if(filterEp&&e.episode!==filterEp)return false;
+    return true;
+  });
+  return html`<div class="content">
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <select class="form-select" value=${filterChar} onChange=${e=>setFilterChar(e.target.value)}>
+        <option value="">── 文字数で絞り込み ──</option>
+        ${allChars.map(n=>html`<option key=${n} value=${n}>${n}字</option>`)}
+      </select>
+      <select class="form-select" value=${filterEp} onChange=${e=>setFilterEp(e.target.value)}>
+        <option value="">── エピソードで絞り込み ──</option>
+        ${allEps.map(ep=>html`<option key=${ep} value=${ep}>${ep}</option>`)}
+      </select>
+    </div>
+    ${filtered.length===0&&html`<div class="empty"><div class="empty-icon">📝</div><p>${allES.length===0?'ESがまだ登録されていません':'条件に一致するESがありません'}</p></div>`}
+    ${filtered.map((r,i)=>html`<div key=${i} class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="min-width:0;flex:1">
+          <span style="font-size:14px;font-weight:700;cursor:pointer;text-decoration:underline;color:#1e40af" onClick=${()=>nav('cd',{cid:r.coId})}>${r.coName}</span>
+          <span style="font-size:11px;color:#94a3b8;margin-left:6px">${r.entryName}</span>
+        </div>
+        <span class=${badgeCls(r.result)} style="flex-shrink:0">${r.result}</span>
+      </div>
+      ${r.episode&&html`<div style="font-size:11px;color:#7c3aed;font-weight:700;margin-bottom:4px">【${r.episode}】</div>`}
+      ${r.charCounts.length>0&&html`<div class="tag-row" style="margin-bottom:6px">${r.charCounts.map(n=>html`<span class="badge badge-gray">${n}字</span>`)}</div>`}
+      <div style="font-size:12px;color:#374151;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:#f8fafc;padding:8px;border-radius:6px;border:1px solid #e2e8f0;line-height:1.6">${r.esContent}</div>
+    </div>`)}
+  </div>`;
+}
+
 // ── App ───────────────────────────────────────────────────
 function App() {
   const [cos,setCos]=useState([]);
   const [tasks,setTasks]=useState([]);
   const [loading,setLoading]=useState(true);
   const [nav,setNav]=useState({view:'main'});
+  const [esdbSub,setEsdbSub]=useState('');
   const [taskModal,setTaskModal]=useState(null);
   const [coModal,setCoModal]=useState(null);
   const [roundModal,setRoundModal]=useState(null);
@@ -689,9 +843,9 @@ function App() {
   const saveCo=c=>{ const id=c.id||uid(); fsSet(COL.co,{...c,id,entries:c.entries||[]}); setCoModal(null); };
   const delCo=id=>{ fsDel(COL.co,id); setCoModal(null); navigate('main'); };
 
-  const TITLES={main:'就活管理',cl:'企業一覧',cd:getCo(nav.cid)?.name||'企業詳細',ed:getEn(nav.cid,nav.eid)?.name||'エントリー詳細',rd:getRd(nav.cid,nav.eid,nav.rid)?.name||'選考詳細'};
+  const TITLES={main:'就活管理',cl:'企業一覧',cd:getCo(nav.cid)?.name||'企業詳細',ed:getEn(nav.cid,nav.eid)?.name||'エントリー詳細',rd:getRd(nav.cid,nav.eid,nav.rid)?.name||'選考詳細',stats:'統計・分析',esdb:'ES データベース'};
   const goBack=()=>{
-    if(nav.view==='cl'||nav.view==='cd') navigate('main');
+    if(nav.view==='cl'||nav.view==='cd'||nav.view==='stats'||nav.view==='esdb') navigate('main');
     else if(nav.view==='ed') navigate('cd',{cid:nav.cid});
     else if(nav.view==='rd') navigate('ed',{cid:nav.cid,eid:nav.eid});
   };
@@ -699,6 +853,8 @@ function App() {
   const body=()=>{
     if(nav.view==='main') return html`<${MainView} companies=${cos} tasks=${tasks} nav=${navigate} onAddTask=${()=>setTaskModal('add')} onToggle=${toggleTask} onEditTask=${t=>setTaskModal(t)} onAddCo=${()=>setCoModal('add')}/>`;
     if(nav.view==='cl') return html`<${CompanyList} companies=${cos} nav=${navigate} onAdd=${()=>setCoModal('add')}/>`;
+    if(nav.view==='stats') return html`<${StatsView} companies=${cos} nav=${navigate}/>`;
+    if(nav.view==='esdb') return html`<${ESDBView} companies=${cos} onTitleChange=${setEsdbSub} nav=${navigate}/>`;
     if(nav.view==='cd'){ const c=getCo(nav.cid); return c?html`<${CompanyDetail} company=${c} nav=${navigate} updateCompany=${updCo}/>`:''; }
     if(nav.view==='ed'){ const c=getCo(nav.cid),e=getEn(nav.cid,nav.eid); return (c&&e)?html`<${EntryDetail} entry=${e} company=${c} nav=${navigate} updateEntry=${en=>updEn(c.id,en)}/>`:''; }
     if(nav.view==='rd'){ const c=getCo(nav.cid),e=getEn(nav.cid,nav.eid),r=getRd(nav.cid,nav.eid,nav.rid);
@@ -710,8 +866,14 @@ function App() {
   return html`<div class="app">
     <div class="header">
       ${nav.view!=='main'&&html`<button class="back-btn" onClick=${goBack}>← 戻る</button>`}
-      <h1>${TITLES[nav.view]||'就活管理'}</h1>
-      ${nav.view==='main'&&html`<button class="back-btn" onClick=${()=>navigate('cl')}>🏢 企業一覧</button>`}
+      <div class="header-title">
+        <h1>${TITLES[nav.view]||'就活管理'}</h1>
+        ${nav.view==='esdb'&&esdbSub&&html`<div style="font-size:11px;color:rgba(255,255,255,.75);margin-top:1px">▸ ${esdbSub}</div>`}
+      </div>
+      ${nav.view==='main'&&html`<div style="display:flex;gap:6px">
+        <button class="back-btn" onClick=${()=>navigate('stats')}>📊</button>
+        <button class="back-btn" onClick=${()=>navigate('esdb')}>📝</button>
+      </div>`}
     </div>
     ${body()}
     ${taskModal&&html`<${TaskModal} task=${taskModal==='add'?null:taskModal} companies=${cos} onSave=${saveTask} onDelete=${delTask} onClose=${()=>setTaskModal(null)}/>`}
